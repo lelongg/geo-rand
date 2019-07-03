@@ -89,10 +89,23 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num + Float + SampleUniform> GeoRand<T>
 
 impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo::Polygon<T> {
     fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
-        let min_x = rng.gen_range(parameters.min_x, parameters.max_x);
-        let min_y = rng.gen_range(parameters.min_y, parameters.max_y);
-        let max_x = rng.gen_range(min_x, parameters.max_x);
-        let max_y = rng.gen_range(min_y, parameters.max_y);
+        let bound_x1 = rng.gen_range(parameters.min_x, parameters.max_x);
+        let bound_y1 = rng.gen_range(parameters.min_y, parameters.max_y);
+        let bound_x2 = rng.gen_range(parameters.min_x, parameters.max_x);
+        let bound_y2 = rng.gen_range(parameters.min_y, parameters.max_y);
+
+        let (min_x, max_x) = if bound_x1 < bound_x2 {
+            (bound_x1, bound_x2)
+        } else {
+            (bound_x2, bound_x1)
+        };
+
+        let (min_y, max_y) = if bound_y1 < bound_y2 {
+            (bound_y1, bound_y2)
+        } else {
+            (bound_y2, bound_y1)
+        };
+
         let translate_x = rng.gen_range(T::zero(), parameters.max_x - max_x);
         let translate_y = rng.gen_range(T::zero(), parameters.max_y - max_y);
         let vertices_count = rng.gen_range(3, parameters.max_polygon_vertices_count);
