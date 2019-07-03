@@ -106,8 +106,8 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo
             (bound_y2, bound_y1)
         };
 
-        let translate_x = rng.gen_range(T::zero(), parameters.max_x - max_x);
-        let translate_y = rng.gen_range(T::zero(), parameters.max_y - max_y);
+        let translate_x = rng.gen_range(parameters.min_x - min_x, parameters.max_x - max_x);
+        let translate_y = rng.gen_range(parameters.min_y - min_y, parameters.max_y - max_y);
         let vertices_count = rng.gen_range(3, parameters.max_polygon_vertices_count);
 
         let point_parameters = GeoRandParameters {
