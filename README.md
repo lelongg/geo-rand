@@ -2,6 +2,9 @@
 
 This crate contains algorithms to generate random geometric shapes such as polygons.
 
+[![crate.io](https://img.shields.io/crates/v/geo-rand.svg)](https://crates.io/crates/geo-rand)
+[![docs.rs](https://docs.rs/geo-rand/badge.svg)](https://docs.rs/geo-rand)
+
 This code is a Rust port of [this JS code](https://github.com/fribbels/fribbels.github.io/blob/master/shortestpath/polyutils.js).
 
 ## Example
