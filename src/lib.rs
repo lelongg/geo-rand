@@ -12,7 +12,7 @@
 //! use rand_core::SeedableRng;
 //! use geo_rand::{GeoRand, GeoRandParameters};
 //! let mut rng = rand_pcg::Pcg64::seed_from_u64(0);
-//! let polygons = geo::MultiPolygon::rand(&mut rng, &GeoRandParameters::default());
+//! let polygons: geo::MultiPolygon<f64> = geo::MultiPolygon::rand(&mut rng, &GeoRandParameters::default());
 //! # }
 //! ```
 //!
@@ -23,39 +23,43 @@
 //! [`GeoRandParameters`]: struct.GeoRandParameters.html
 
 use geo::algorithm::{intersects::Intersects, translate::Translate};
+use num_traits::{Float, Num, NumCast};
+use rand::distributions::uniform::SampleUniform;
 use rand::prelude::*;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct GeoRandParameters {
+pub struct GeoRandParameters<T: Copy + PartialOrd<T> + NumCast + Num> {
     pub max_polygons_count: usize,
     pub max_polygon_vertices_count: usize,
     pub max_collisions_count: Option<u32>,
-    pub min_x: f64,
-    pub min_y: f64,
-    pub max_x: f64,
-    pub max_y: f64,
+    pub min_x: T,
+    pub min_y: T,
+    pub max_x: T,
+    pub max_y: T,
 }
 
-impl Default for GeoRandParameters {
+impl<T: Copy + PartialOrd<T> + NumCast + Num> Default for GeoRandParameters<T> {
     fn default() -> Self {
         Self {
             max_polygons_count: 60,
             max_polygon_vertices_count: 7,
             max_collisions_count: Some(100),
-            min_x: 0.0,
-            min_y: 0.0,
-            max_x: 400.0,
-            max_y: 400.0,
+            min_x: T::zero(),
+            min_y: T::zero(),
+            max_x: T::from(100.0).unwrap(),
+            max_y: T::from(100.0).unwrap(),
         }
     }
 }
 
-pub trait GeoRand {
-    fn rand(rng: &mut impl Rng, geo_rand_parameters: &GeoRandParameters) -> Self;
+pub trait GeoRand<T: Copy + PartialOrd<T> + NumCast + Num> {
+    fn rand(rng: &mut impl Rng, geo_rand_parameters: &GeoRandParameters<T>) -> Self;
 }
 
-impl GeoRand for geo::MultiPolygon<f64> {
-    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters) -> Self {
+impl<T: Copy + PartialOrd<T> + NumCast + Num + Float + SampleUniform> GeoRand<T>
+    for geo::MultiPolygon<T>
+{
+    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
         let mut polygons = Vec::with_capacity(parameters.max_polygons_count);
         let mut collisions_count = 0;
 
@@ -67,7 +71,7 @@ impl GeoRand for geo::MultiPolygon<f64> {
         {
             let new_polygon = geo::Polygon::rand(rng, parameters);
 
-            if let Some(_) = parameters.max_collisions_count {
+            if parameters.max_collisions_count.is_some() {
                 for polygon in &polygons {
                     if new_polygon.intersects(polygon) {
                         collisions_count += 1;
@@ -83,14 +87,14 @@ impl GeoRand for geo::MultiPolygon<f64> {
     }
 }
 
-impl GeoRand for geo::Polygon<f64> {
-    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters) -> Self {
+impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo::Polygon<T> {
+    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
         let min_x = rng.gen_range(parameters.min_x, parameters.max_x);
         let min_y = rng.gen_range(parameters.min_y, parameters.max_y);
         let max_x = rng.gen_range(min_x, parameters.max_x);
         let max_y = rng.gen_range(min_y, parameters.max_y);
-        let translate_x = rng.gen_range(0.0, parameters.max_x - max_x);
-        let translate_y = rng.gen_range(0.0, parameters.max_y - max_y);
+        let translate_x = rng.gen_range(T::zero(), parameters.max_x - max_x);
+        let translate_y = rng.gen_range(T::zero(), parameters.max_y - max_y);
         let vertices_count = rng.gen_range(3, parameters.max_polygon_vertices_count);
 
         let point_parameters = GeoRandParameters {
@@ -98,7 +102,7 @@ impl GeoRand for geo::Polygon<f64> {
             min_y,
             max_x,
             max_y,
-            ..parameters.clone()
+            ..*parameters
         };
 
         let points: Vec<_> = (0..vertices_count)
@@ -110,8 +114,8 @@ impl GeoRand for geo::Polygon<f64> {
     }
 }
 
-impl GeoRand for geo::Point<f64> {
-    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters) -> Self {
+impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo::Point<T> {
+    fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
         geo::Point::new(
             rng.gen_range(parameters.min_x, parameters.max_x),
             rng.gen_range(parameters.min_y, parameters.max_y),
@@ -119,7 +123,9 @@ impl GeoRand for geo::Point<f64> {
     }
 }
 
-fn points_to_contour(points: &[geo::Point<f64>]) -> Option<geo::LineString<f64>> {
+fn points_to_contour<T: Copy + PartialOrd<T> + NumCast + Num>(
+    points: &[geo::Point<T>],
+) -> Option<geo::LineString<T>> {
     let first_point = *points.get(0)?;
     let (left_most, right_most) = points.iter().skip(1).fold(
         (first_point, first_point),
@@ -139,13 +145,13 @@ fn points_to_contour(points: &[geo::Point<f64>]) -> Option<geo::LineString<f64>>
         },
     );
 
-    let (mut above_list, mut below_list): (Vec<geo::Point<f64>>, Vec<geo::Point<f64>>) = points
+    let (mut above_list, mut below_list): (Vec<geo::Point<T>>, Vec<geo::Point<T>>) = points
         .iter()
         .filter(|&&point| point != left_most && point != right_most)
         .partition(|&&point| left_turn_test(&(right_most - left_most), &(point - left_most)));
 
-    above_list.sort_by(|a, b| (a.x() - b.x()).partial_cmp(&0.0).unwrap());
-    below_list.sort_by(|a, b| (b.x() - a.x()).partial_cmp(&0.0).unwrap());
+    above_list.sort_by(|a, b| (a.x() - b.x()).partial_cmp(&T::zero()).unwrap());
+    below_list.sort_by(|a, b| (b.x() - a.x()).partial_cmp(&T::zero()).unwrap());
 
     Some(
         std::iter::once(left_most)
@@ -157,6 +163,9 @@ fn points_to_contour(points: &[geo::Point<f64>]) -> Option<geo::LineString<f64>>
     )
 }
 
-fn left_turn_test(point: &geo::Point<f64>, other_point: &geo::Point<f64>) -> bool {
-    ((point.x() * other_point.y()) - (point.y() * other_point.x())).is_sign_positive()
+fn left_turn_test<T: Copy + PartialOrd<T> + NumCast + Num>(
+    point: &geo::Point<T>,
+    other_point: &geo::Point<T>,
+) -> bool {
+    ((point.x() * other_point.y()) - (point.y() * other_point.x())) >= T::zero()
 }
