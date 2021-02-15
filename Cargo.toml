@@ -17,5 +17,5 @@ num-traits = "0.2.8"
 rand = "0.7.0"
 
 [dev-dependencies]
-rand_core = "0.5.0"
+rand_core = "0.6.2"
 rand_pcg = "0.2.0"
