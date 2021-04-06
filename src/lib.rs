@@ -22,13 +22,15 @@
 //! [`rand`]: trait.GeoRand.html#method.rand
 //! [`GeoRandParameters`]: struct.GeoRandParameters.html
 
-use geo::algorithm::{intersects::Intersects, translate::Translate};
-use num_traits::{Float, Num, NumCast};
-use rand::distributions::uniform::SampleUniform;
-use rand::prelude::*;
+use geo::{
+    algorithm::{intersects::Intersects, translate::Translate},
+    CoordNum, GeoNum,
+};
+use rand::{distributions::uniform::SampleUniform, prelude::*};
+use std::fmt::Debug;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct GeoRandParameters<T: Copy + PartialOrd<T> + NumCast + Num> {
+pub struct GeoRandParameters<T> {
     pub max_polygons_count: usize,
     pub max_polygon_vertices_count: usize,
     pub max_collisions_count: Option<u32>,
@@ -38,7 +40,7 @@ pub struct GeoRandParameters<T: Copy + PartialOrd<T> + NumCast + Num> {
     pub max_y: T,
 }
 
-impl<T: Copy + PartialOrd<T> + NumCast + Num> Default for GeoRandParameters<T> {
+impl<T: CoordNum> Default for GeoRandParameters<T> {
     fn default() -> Self {
         Self {
             max_polygons_count: 60,
@@ -52,13 +54,11 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num> Default for GeoRandParameters<T> {
     }
 }
 
-pub trait GeoRand<T: Copy + PartialOrd<T> + NumCast + Num> {
+pub trait GeoRand<T> {
     fn rand(rng: &mut impl Rng, geo_rand_parameters: &GeoRandParameters<T>) -> Self;
 }
 
-impl<T: Copy + PartialOrd<T> + NumCast + Num + Float + SampleUniform> GeoRand<T>
-    for geo::MultiPolygon<T>
-{
+impl<T: GeoNum + SampleUniform> GeoRand<T> for geo::MultiPolygon<T> {
     fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
         let mut polygons = Vec::with_capacity(parameters.max_polygons_count);
         let mut collisions_count = 0;
@@ -87,12 +87,12 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num + Float + SampleUniform> GeoRand<T>
     }
 }
 
-impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo::Polygon<T> {
+impl<T: CoordNum + SampleUniform> GeoRand<T> for geo::Polygon<T> {
     fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
-        let bound_x1 = rng.gen_range(parameters.min_x, parameters.max_x);
-        let bound_y1 = rng.gen_range(parameters.min_y, parameters.max_y);
-        let bound_x2 = rng.gen_range(parameters.min_x, parameters.max_x);
-        let bound_y2 = rng.gen_range(parameters.min_y, parameters.max_y);
+        let bound_x1 = rng.gen_range(parameters.min_x..parameters.max_x);
+        let bound_y1 = rng.gen_range(parameters.min_y..parameters.max_y);
+        let bound_x2 = rng.gen_range(parameters.min_x..parameters.max_x);
+        let bound_y2 = rng.gen_range(parameters.min_y..parameters.max_y);
 
         let (min_x, max_x) = if bound_x1 < bound_x2 {
             (bound_x1, bound_x2)
@@ -106,9 +106,9 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo
             (bound_y2, bound_y1)
         };
 
-        let translate_x = rng.gen_range(parameters.min_x - min_x, parameters.max_x - max_x);
-        let translate_y = rng.gen_range(parameters.min_y - min_y, parameters.max_y - max_y);
-        let vertices_count = rng.gen_range(3, parameters.max_polygon_vertices_count);
+        let translate_x = rng.gen_range(parameters.min_x - min_x..parameters.max_x - max_x);
+        let translate_y = rng.gen_range(parameters.min_y - min_y..parameters.max_y - max_y);
+        let vertices_count = rng.gen_range(3..parameters.max_polygon_vertices_count);
 
         let point_parameters = GeoRandParameters {
             min_x,
@@ -127,18 +127,16 @@ impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo
     }
 }
 
-impl<T: Copy + PartialOrd<T> + NumCast + Num + SampleUniform> GeoRand<T> for geo::Point<T> {
+impl<T: CoordNum + SampleUniform> GeoRand<T> for geo::Point<T> {
     fn rand(rng: &mut impl Rng, parameters: &GeoRandParameters<T>) -> Self {
         geo::Point::new(
-            rng.gen_range(parameters.min_x, parameters.max_x),
-            rng.gen_range(parameters.min_y, parameters.max_y),
+            rng.gen_range(parameters.min_x..parameters.max_x),
+            rng.gen_range(parameters.min_y..parameters.max_y),
         )
     }
 }
 
-fn points_to_contour<T: Copy + PartialOrd<T> + NumCast + Num>(
-    points: &[geo::Point<T>],
-) -> Option<geo::LineString<T>> {
+fn points_to_contour<T: CoordNum>(points: &[geo::Point<T>]) -> Option<geo::LineString<T>> {
     let first_point = *points.get(0)?;
     let (left_most, right_most) = points.iter().skip(1).fold(
         (first_point, first_point),
@@ -176,9 +174,6 @@ fn points_to_contour<T: Copy + PartialOrd<T> + NumCast + Num>(
     )
 }
 
-fn left_turn_test<T: Copy + PartialOrd<T> + NumCast + Num>(
-    point: &geo::Point<T>,
-    other_point: &geo::Point<T>,
-) -> bool {
+fn left_turn_test<T: CoordNum>(point: &geo::Point<T>, other_point: &geo::Point<T>) -> bool {
     ((point.x() * other_point.y()) - (point.y() * other_point.x())) >= T::zero()
 }
